@@ -21,11 +21,15 @@
         <fieldset>
           <label for="world">Select world:</label>
           <select id="world" v-model.trim="selectedWorld">
-            <option v-for="world in worlds" :key="world.name" :value="world.name">
+            <option
+              v-for="world in worlds"
+              :key="world.name"
+              :value="world.name"
+            >
               {{ world.title }}
             </option>
           </select>
-          <input class="button-primary" type="submit" value="Get actors" />
+          <input class="button-primary" type="submit" value="Load actors" />
         </fieldset>
       </form>
       <form @submit.prevent v-if="hasWorlds">
@@ -99,6 +103,12 @@ export default defineComponent({
       loading: false,
     };
   },
+  created() {
+    window.onpopstate = () => {
+      this.parseURL(document.location);
+    };
+    this.parseURL(document.location);
+  },
   computed: {
     hasWorlds(): Boolean {
       return this.worlds.length > 0;
@@ -108,21 +118,47 @@ export default defineComponent({
     },
   },
   methods: {
+    parseURL(url: Location) {
+      const params = new URLSearchParams(url.search.substring(1));
+      let site = params.get("site") || "";
+      if (site !== "") {
+        try {
+          let base = new window.URL(site);
+          if (this.siteURL !== base.toString()) {
+            this.siteURL = base.toString();
+            this.getWorlds();
+          }
+
+          let world = params.get("world") || "";
+          if (world !== "" && world !== this.selectedWorld) {
+            this.selectedWorld = world;
+            this.getActors();
+          }
+        } catch (e) {
+          console.error('Invalid "site" value provided. Got:', site);
+        }
+      }
+    },
+    updateURL(key: string, value: string) {
+      const url = new URL(window.location.toString());
+      url.searchParams.set(key, value);
+      window.history.pushState({}, "", url.toString());
+    },
     getWorlds() {
       if (!this.siteURL) {
         return;
       }
       this.error = "";
 
-      let base = (null as unknown) as URL;
       try {
-        base = new window.URL(this.siteURL);
+        let base = new window.URL(this.siteURL);
         this.siteURL = base.toString();
       } catch (e) {
         this.error = `Error: invalid URL. ${e}`;
         return;
       }
 
+      this.updateURL("site", this.siteURL);
       this.loading = true;
       const url = `https://cors-anywhere.ardittristan.workers.dev/corsproxy/?apiurl=${this.siteURL}actorAPI/worlds.json`;
       fetch(url)
@@ -142,6 +178,7 @@ export default defineComponent({
       }
       this.error = "";
 
+      this.updateURL("world", this.selectedWorld);
       this.loading = true;
       const url = `https://cors-anywhere.ardittristan.workers.dev/corsproxy/?apiurl=${this.siteURL}actorAPI/${this.selectedWorld}-actors.json`;
       fetch(url)
