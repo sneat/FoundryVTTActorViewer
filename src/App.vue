@@ -1,70 +1,64 @@
 <template>
   <div class="container">
+    <h1 class="title">VTT External Actor Viewer</h1>
     <div class="row">
-      <div class="column">
-        <h1>Available Actors</h1>
-        <p>
-          This is a list of actors available within this intance of FoundryVTT.
-        </p>
-      </div>
+      <form @submit.prevent="getWorlds">
+        <fieldset>
+          <label for="siteURL">FoundryVTT instance URL:</label>
+          <input
+            id="siteURL"
+            type="url"
+            placeholder="https://example.com:3000/"
+            v-model.trim="siteURL"
+          />
+          <input class="button-primary" type="submit" value="Load worlds" />
+          <p v-if="!hasWorlds">
+            Start by entering the URL of your FoundryVTT instance.
+          </p>
+        </fieldset>
+      </form>
+      <form @submit.prevent="getActors" v-if="hasWorlds">
+        <fieldset>
+          <label for="world">Select world:</label>
+          <select id="world" v-model.trim="selectedWorld">
+            <option v-for="world in worlds" :key="world.name" :value="world.name">
+              {{ world.title }}
+            </option>
+          </select>
+          <input class="button-primary" type="submit" value="Get actors" />
+        </fieldset>
+      </form>
+      <form @submit.prevent v-if="hasWorlds">
+        <fieldset>
+          <label for="showPC">Show PCs</label>
+          <input type="checkbox" id="showPC" v-model="showPC" />
+        </fieldset>
+      </form>
+      <form @submit.prevent v-if="hasWorlds">
+        <fieldset>
+          <label for="showNPC">Show NPCs</label>
+          <input type="checkbox" id="showNPC" v-model="showNPC" />
+        </fieldset>
+      </form>
     </div>
     <div class="row">
       <div class="column">
         <div v-if="error" class="error">
           <span>{{ error }}</span>
         </div>
-        <div v-else-if="loading" class="loading">
+        <div v-if="loading" class="loading">
           <div class="lds-dual-ring"></div>
         </div>
-        <table v-else class="u-full-width">
-          <thead>
-            <tr>
-              <th width="4em"><label for="filterName">Name</label></th>
-              <th>
-                <input
-                  v-model.trim="filterName"
-                  id="filterName"
-                  type="search"
-                  class="x-large"
-                />
-              </th>
-              <th width="25%">
-                <label
-                  >Race
-                  <input v-model.trim="filterRace" type="search" class="medium"
-                /></label>
-              </th>
-              <th width="23%">
-                <label
-                  >Class
-                  <input
-                    v-model.trim="filterClass"
-                    type="search"
-                    class="medium"
-                /></label>
-              </th>
-              <th width="12%">
-                <label
-                  >Level
-                  <input
-                    v-model.number="filterLevel"
-                    type="number"
-                    class="small"
-                /></label>
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            <Actor
-              v-for="actor in filteredActors"
-              :actor="actor"
-              :key="actor.data.id"
-              :config="config"
-            />
-          </tbody>
-        </table>
       </div>
     </div>
+    <List
+      v-if="hasActors"
+      :actors="actors"
+      :siteURL="siteURL"
+      :worldName="selectedWorld"
+      :showPC="showPC"
+      :showNPC="showNPC"
+    />
     <div class="row">
       <div class="column footer">
         <p>
@@ -76,12 +70,7 @@
             target="_blank"
             >VTT External Actor Viewer</a
           >
-          module. View the
-          <a
-            href="https://github.com/sneat/FoundryVTTActorViewer/blob/master/README.md"
-            target="_blank"
-            >Readme</a
-          >.
+          module.
         </p>
       </div>
     </div>
@@ -90,94 +79,81 @@
 
 <script lang="ts">
 import { defineComponent } from "vue";
-import { default as Actor, ActorType } from "./Actor.vue";
-import { default as getConfig, Config } from "./config";
+import { default as List } from "./List.vue";
+import { ActorType } from "./Actor.vue";
 
 export default defineComponent({
   name: "App",
   components: {
-    Actor,
+    List,
   },
   data() {
     return {
-      actors: [] as Array<ActorType>,
-      config: (null as unknown) as Config,
-      filterClass: (null as unknown) as string,
-      filterLevel: (null as unknown) as number,
-      filterName: (null as unknown) as string,
-      filterRace: (null as unknown) as string,
+      siteURL: (null as unknown) as string,
       error: (null as unknown) as string,
-      loading: true,
+      selectedWorld: (null as unknown) as string,
+      worlds: [] as Array<string>,
+      actors: [] as Array<ActorType>,
+      showPC: true,
+      showNPC: false,
+      loading: false,
     };
   },
-  created() {
-    getConfig().then((config) => {
-      const url = `${config.siteURL}actorAPI/${config.worldName}-actors.json`;
+  computed: {
+    hasWorlds(): Boolean {
+      return this.worlds.length > 0;
+    },
+    hasActors(): Boolean {
+      return this.actors.length > 0;
+    },
+  },
+  methods: {
+    getWorlds() {
+      if (!this.siteURL) {
+        return;
+      }
+      this.error = "";
+
+      let base = (null as unknown) as URL;
+      try {
+        base = new window.URL(this.siteURL);
+        this.siteURL = base.toString();
+      } catch (e) {
+        this.error = `Error: invalid URL. ${e}`;
+        return;
+      }
+
+      this.loading = true;
+      const url = `https://cors-anywhere.ardittristan.workers.dev/corsproxy/?apiurl=${this.siteURL}actorAPI/worlds.json`;
       fetch(url)
         .then((response) => response.json())
-        .then((data) => {
-          this.actors = Object.values(data);
-          this.config = config;
+        .then((worlds) => {
+          this.worlds = worlds;
           this.loading = false;
         })
         .catch((error) => {
           this.error = `Error: ${error}. Could not access ${url}.`;
+          this.loading = false;
         });
-    });
-  },
-  computed: {
-    filteredActors(): Array<ActorType> {
-      return this.actors
-        .filter(this.filterByLevel)
-        .filter(this.filterByClass)
-        .filter(this.filterByName)
-        .filter(this.filterByRace)
-        .sort(this.orderByLevel);
     },
-  },
-  methods: {
-    filterByClass(actor: ActorType): boolean {
-      // no search, don't filter
-      if (!this.filterClass) {
-        return true;
+    getActors() {
+      if (!this.selectedWorld) {
+        return;
       }
-      let value = "";
-      if (Actor.methods) {
-        value = Actor.methods.getClass(actor);
-      }
-      return value.toLowerCase().includes(this.filterClass.toLowerCase());
-    },
-    filterByLevel(actor: ActorType): boolean {
-      // no search, don't filter
-      if (!this.filterLevel) {
-        return true;
-      }
-      return actor?.data?.details?.level == this.filterLevel;
-    },
-    filterByName(actor: ActorType): boolean {
-      // no search, don't filter
-      if (!this.filterName) {
-        return true;
-      }
-      let value = "";
-      if (Actor.methods) {
-        value = Actor.methods.getName(actor);
-      }
-      return value.toLowerCase().includes(this.filterName.toLowerCase());
-    },
-    filterByRace(actor: ActorType): boolean {
-      // no search, don't filter
-      if (!this.filterRace) {
-        return true;
-      }
-      let value = "";
-      if (Actor.methods) {
-        value = Actor.methods.getRace(actor);
-      }
-      return value.toLowerCase().includes(this.filterRace.toLowerCase());
-    },
-    orderByLevel(a: ActorType, b: ActorType) {
-      return a.data.details.level - b.data.details.level;
+      this.error = "";
+
+      this.loading = true;
+      const url = `https://cors-anywhere.ardittristan.workers.dev/corsproxy/?apiurl=${this.siteURL}actorAPI/${this.selectedWorld}-actors.json`;
+      fetch(url)
+        .then((response) => response.json())
+        .then((actors) => {
+          this.actors = Object.values(actors);
+          this.loading = false;
+        })
+        .catch((error) => {
+          this.error = `Error: ${error}. Could not access ${url}.`;
+          this.loading = false;
+        });
     },
   },
 });

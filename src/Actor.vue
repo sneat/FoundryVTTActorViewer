@@ -20,7 +20,6 @@
 
 <script lang="ts">
 import { defineComponent, PropType } from "vue";
-import { Config } from '../config'
 
 export interface ActorType {
   _id: string;
@@ -38,7 +37,10 @@ interface ActorData {
 
 interface ActorDetails {
   race: string;
-  level: number;
+  type?: string;
+  alignment?: string;
+  level?: number;
+  cr?: number;
   [propName: string]: any;
 }
 
@@ -60,8 +62,12 @@ export default defineComponent({
       type: Object as PropType<ActorType>,
       required: true,
     },
-    config: {
-      type: Object as PropType<Config>,
+    siteURL: {
+      type: String,
+      required: true,
+    },
+    worldName: {
+      type: String,
       required: true,
     },
   },
@@ -74,23 +80,32 @@ export default defineComponent({
       try {
         new URL(actor.img);
       } catch (e) {
-        url = `${this.config.siteURL}${actor.img}`;
+        url = `${this.siteURL}${actor.img}`;
       }
       return url;
     },
     getActorSheetURL(actor: ActorType): string {
-      return `https://ardittristan.github.io/VTTExternalActorSite/?${this.config.siteURL}actorAPI/${this.config.worldName}.json${actor._id}`;
+      return `https://ardittristan.github.io/VTTExternalActorSite/?${this.siteURL}actorAPI/${this.worldName}-actors.json${actor._id}`;
     },
     getName(actor: ActorType): string {
       return actor?.name || "Unknown";
     },
     getRace(actor: ActorType): string {
+      if (actor.type === "npc") {
+        return actor?.data?.details?.type || "Unknown";
+      }
       return actor?.data?.details?.race || "Unknown";
     },
     getLevel(actor: ActorType): number | string {
+      if (actor.type === "npc") {
+        return actor?.data?.details?.cr || "Unknown";
+      }
       return actor?.data?.details?.level || "Unknown";
     },
     getClass(actor: ActorType) {
+      if (actor.type === "npc") {
+        return actor?.data?.details?.alignment || "-";
+      }
       let names = [] as Array<string>;
       let classes = actor.items.filter((item: Item) => item.type === "class");
       classes.forEach((c: Item) => {
@@ -100,7 +115,7 @@ export default defineComponent({
           names.push(`${c.name} (${c?.data?.levels})`);
         }
       });
-      return names.length ? names.join(" / ") : 'Unknown';
+      return names.length ? names.join(" / ") : "Unknown";
     },
   },
 });
